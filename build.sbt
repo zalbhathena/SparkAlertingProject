@@ -4,6 +4,8 @@ organization := "edu.nyu.realtimebd.analytics"
 
 scalaVersion := "2.10.4"
 
+unmanagedSourceDirectories in Compile += file("/home/znb205/SparkAlertingProject/src")
+
 libraryDependencies ++= Seq("org.apache.spark" %% "spark-core" % "1.5.0", 
 "org.apache.spark" %% "spark-sql" % "1.5.0", 
  "org.apache.spark" %% "spark-hive" % "1.5.0", 
