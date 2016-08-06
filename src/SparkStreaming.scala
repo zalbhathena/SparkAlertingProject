@@ -1,5 +1,8 @@
 package pl.japila.spark
-
+import scala.reflect.ClassTag
+import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
+import java.io._
+import org.slf4j.LoggerFactory
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 
@@ -18,13 +21,19 @@ import AlertingUtils.HDFSAcc._
  *
  * Then create a text file in `localdir` and the words in the file will get counted.
  */
+
+//TODO: use classes instead of tuples and learn how to serialize those classes (time constraints prevented this)
 object HdfsWordCount {
+
         val numExecutors = 20
         val numThreads = 5
-        val partitions = numExecutors * numThreads	
+        val partitions = numExecutors * numThreads
 
+	type Alert = (Int, String, String, Boolean, Long, Long, String, String, Double)	
+	type Tick = (Long, String, Double, Long)
+	type AlertMap = scala.collection.mutable.Map[Int, Alert] 
 	//Tickers of format (time, (time, ticker, price, volume))
-	def updateStateForTickers(values: Seq[(Long,String,Double,Long)], state: Option[Any]): Option[Any] = {
+	def updateStateForTickers(values: Seq[Tick], state: Option[Any]): Option[Any] = {
 		if(values.length == 0)
 			return state
 		var earliest = values(0)
@@ -35,15 +44,46 @@ object HdfsWordCount {
 		}
 		return Option(earliest)
 	}
-	//Alerts of format (ticker, (email, ticker, active, delay, last_triggered, operator, left_operand, right_operand))
-	def updateStateForAlerts(values: Seq[(String, String, Boolean, Long, Long, String, String, Double)], state: Option[Seq[Any]]): Option[Seq[Any]] = {
+	//Alerts of format (ticker, (id, email, ticker, active, delay, last_triggered, operator, left_operand, right_operand))
+	def updateStateForAlerts(values: Seq[(Alert)], state: Option[Seq[Any]]): Option[Seq[Any]] = {
 		if(values.length == 0)
 			return state
 		return Option(state.getOrElse(Seq()) ++ values)
 	}
 
-	def formatAlert(x:Seq[String]):(String, (String, String, Boolean, Long, Long, String, String, Double)) = {
-		return (x(1).toString, (x(0).toString, x(1).toString, false, x(2).toLong, -1 * x(2).toLong, x(3).toString, x(4).toString, x(5).toDouble))
+
+	def updateStateForJoinedAlerts(values: Seq[(Equals, Any)], state: Option[AlertMap]): Option[AlertMap] = {
+		val castedValues = values.asInstanceOf[Seq[(String, (List[Alert], Tick))]]
+		if(values.length == 0)
+			return state
+		var alertMap:AlertMap = state.getOrElse(scala.collection.mutable.Map[Int, Alert]())
+		
+		val writer = new PrintWriter(new File("/home/znb205/testo.txt" ))
+		writer.write(ClassTag(values.getClass).toString+ "\n")
+		writer.write(ClassTag(values(0).getClass).toString+ "\n")
+		writer.write(ClassTag(castedValues.getClass).toString+"\n")
+		writer.write(ClassTag(castedValues(0).getClass).toString+"\n")
+		writer.write(castedValues(0).getClass.toString+"\n")
+      		writer.write(castedValues.toString+"\n")
+      		writer.write(castedValues(0).toString+"\n")
+      		writer.write(castedValues(0)._1.toString+"\n")
+      		writer.write(values.toString+"\n")
+      		writer.write(values(0).toString+"\n")
+      		writer.write(values(0)._2.toString+"\n")
+		writer.close()
+		
+		//val tickers = castedValues(0)._2._2
+		val alerts = castedValues(0)._2._1
+		for(alert <- alerts) {
+			val lastAlert = alertMap.get(alert._1).getOrElse(alert)
+			val newAlert = (lastAlert._1, lastAlert._2, lastAlert._3, true, lastAlert._5, lastAlert._6, lastAlert._7, lastAlert._8, lastAlert._9)
+			alertMap += lastAlert._1 -> newAlert
+		}
+		return Option(alertMap)
+	}
+
+	def formatAlert(x:Seq[String]):(String, Alert) = {
+		return (x(2).toString, (x(0).toInt, x(1).toString, x(2).toString, false, x(3).toLong, -1 * x(3).toLong, x(4).toString, x(5).toString, x(6).toDouble))
 	} 
 
 	def main(args: Array[String]) {
@@ -55,9 +95,12 @@ object HdfsWordCount {
 		sparkConf.set("spark.executor.memory", "10g").set("spark.executor.cores", numThreads.toString).set("spark.executor.instances", numExecutors.toString)
 
 
+		/*val log = LogManager.getRootLogger
+    		log.setLevel(Level.WARN)
+		log.warn("I am done")
+		*/
 		val ssc = new StreamingContext(sparkConf, Seconds(2))
-		ssc.checkpoint("checkpoints")		
-
+		ssc.checkpoint("checkpoints")	
 		// Create the FileInputDStream on the directory and use the
     		// stream to count words in new files created
     		val rawTicks = ssc.textFileStream(args(0)).map(_.split(","))
@@ -71,7 +114,12 @@ object HdfsWordCount {
 		formattedAlerts.print()
 		val alertState = formattedAlerts.updateStateByKey(updateStateForAlerts _)
 		alertState.print()
-
+				
+		val rawJoinedAlerts = alertState.fullOuterJoin(tickerState).filter(x => x._2._1 != None & x._2._2 != None)
+		val formattedJoinedAlerts = rawJoinedAlerts.map(x => (x._1, (x._2._1.getOrElse(None), x._2._2.getOrElse(None) ) ) )
+		rawJoinedAlerts.print()
+		val alertsTriggered = formattedJoinedAlerts.updateStateByKey(updateStateForJoinedAlerts _)
+		alertsTriggered.print()
 		ssc.start()
     		ssc.awaitTermination()
 	}
