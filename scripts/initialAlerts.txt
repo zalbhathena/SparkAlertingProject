@@ -1,0 +1,3 @@
+znb205@nyu.edu,YHOO,100,>,P,100
+znb205@nyu.edu,YHOO,100,<,P,200
+znb205@nyu.edu,GOOG,100,<,P,100
