@@ -1,10 +1,7 @@
 import sys
 import os
-
-from datetime import datetime
-dt = datetime.now()
-t = dt.microsecond
-
+import time
+t = time.time()
 
 alertCountFile = "./.alertcount.txt"
 tempdirectory = ".tempdirectory/"
@@ -14,18 +11,18 @@ if not os.path.exists(tempdirectory):
 
 alertCount = 0
 if os.path.isfile(alertCountFile):
-	with open('myfile.txt', 'r') as f:
+	with open(alertCountFile, 'r') as f:
 		first_line = f.readline()
-		alertCount = int(alertCount)
+		alertCount = int(first_line.rstrip("\n"))
 
 if sys.argv[1] == "-a":
-	alertArgs = argv[2:]
+	alertArgs = sys.argv[2:]
 	lines = []
 	for i in range(0, len(alertArgs)/6):
-		lines.append(str(alertCount) + "," + ",".join(alertArgs[i:i+6])
+		lines.append(str(alertCount) + "," + ",".join(alertArgs[i*6:i*6+6]))
 		alertCount = alertCount + 1
 	alertCountFile = open(alertCountFile, 'w+')
-	alertCountFile.write(alertCount)
+	alertCountFile.write(str(alertCount))
 	alertCountFile.close()
 		
 	alertFile = open(tempdirectory+"tempfile.txt", 'w+')
@@ -37,6 +34,16 @@ if sys.argv[1] == "-a":
 
 
 elif sys.argv[1] == "-p":
-	pass
+	portfolioArgs = sys.argv[3:]
+	ticker = sys.argv[2]
+	portfolioString = ticker
+	for i in range(0, len(portfolioArgs)/2):
+		portfolioString = portfolioString + "," + portfolioArgs[i*2]+":"+portfolioArgs[i*2+1]
+	portfolioFile = open(tempdirectory+"tempfile.txt", 'w+')
+	portfolioFile.write(portfolioString+"\n")
+	portfolioFile.close()
+        os.system("hdfs dfs -put "+tempdirectory+ "tempfile.txt tempstreaming/portfolio"+str(t))
+        os.system("hdfs dfs -mv tempstreaming/portfolio"+str(t)+" streaminginput/portfolios/portfolio"+str(t))	
 
 os.system("rm -r "+tempdirectory)
+
