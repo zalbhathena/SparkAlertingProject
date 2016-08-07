@@ -20,7 +20,8 @@ os.system("hdfs dfs -rm -r streaminginput/portfolios/*")
 
 os.system("hdfs dfs -copyToLocal data/latestTicks/part-00000 " + ticksDirectory)
 
-os.system("hdfs dfs -put "+ticksDirectory+"/part-00000 streaminginput/ticks/initialTicks")
 os.system("hdfs dfs -put initialAlerts.txt streaminginput/alerts/initialAlerts")
+os.system("hdfs dfs -put "+ticksDirectory+"/part-00000 streaminginput/ticks/initialTicks")
+os.system("hdfs dfs -put initialPortfolios.txt streaminginput/portfolios/initialPortfolios")
 
 os.system("rm -r .streamingtemp")
