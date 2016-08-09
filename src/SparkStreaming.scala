@@ -31,8 +31,8 @@ import AlertingUtils.HDFSAcc._
 //TODO: use classes instead of tuples and learn how to serialize those classes (time constraints prevented this)
 object HdfsWordCount {
 	val streamingInterval = 2
-        val numExecutors = 20
-        val numThreads = 5
+        val numExecutors = 5
+        val numThreads = 1
         val partitions = numExecutors * numThreads
 	type Alert = (Int, String, String, Boolean, Long, DateTime, String, String, Double)	
 	type Tick = (Long, String, Double, Long)
@@ -165,20 +165,20 @@ object HdfsWordCount {
    		formattedTicks.print()
 		val tickerState = formattedTicks.updateStateByKey(updateStateForTickers _)
 		val latestTicks = formattedTicks.fullOuterJoin(tickerState).filter(x => x._2._1 != None & x._2._2 != None).map(x => (x._1, x._2._2.getOrElse[Tick]( (0,"",0.0,0) )))
-		latestTicks.print()
+		//latestTicks.print()
 
 		val rawAlerts = ssc.textFileStream(args(1)).map(_.split(","))
 		val formattedAlerts = rawAlerts.map(x => formatAlert(x))
-		formattedAlerts.print()
+		//formattedAlerts.print()
 		val alertState = formattedAlerts.updateStateByKey(updateStateForAlerts _)
 		//alertState.print()
 	
 		val rawPortfolios = ssc.textFileStream(args(2)).map(_.split(","))
 		val formattedPortfolios = rawPortfolios.flatMap(x => formatPortfolio(x))
-		formattedPortfolios.print()		
+		//formattedPortfolios.print()		
 		val portfolioState =formattedPortfolios.fullOuterJoin(tickerState).filter(x => x._2._1 != None & x._2._2 !=None).updateStateByKey(updateStateForPortfolios _)
 
-		portfolioState.print()
+		//portfolioState.print()
 
 		val portfolioTickers = tickerState.fullOuterJoin(formattedPortfolios).filter(x => x._2._1 != None & x._2._2 !=None).map(x => (x._1, x._2._1.getOrElse[Tick]((0,"",0.0,0))))
 		val portfolioPrices = portfolioState.fullOuterJoin(formattedTicks.union(portfolioTickers)).filter(x => x._2._1 != None & x._2._2 !=None).updateStateByKey(updateStateForPortfolioPrices _)
@@ -186,7 +186,7 @@ object HdfsWordCount {
 
 		val rawJoinedAlerts = alertState.fullOuterJoin(latestTicks.union(latestPortfolioTicks)).filter(x => x._2._1 != None & x._2._2 != None)
 		val allAlertsState = rawJoinedAlerts.updateStateByKey(updateStateForJoinedAlerts _)
-		allAlertsState.print()
+		//allAlertsState.print()
 		def getAlertInfo(x:(Any, AlertMap)): AlertMap = {
 			val t = DateTime.now.getMillis()
 			val alertMap = x._2.filter(y => y._2._4 & t - y._2._6.getMillis() < streamingInterval*1000)
@@ -194,7 +194,7 @@ object HdfsWordCount {
 		}
 		val alertsTriggered = allAlertsState.flatMap(getAlertInfo).map(x => x._2)
 		alertsTriggered.repartition(1).saveAsTextFiles("emails/email")
-		alertsTriggered.print()
+		//alertsTriggered.print()
 		ssc.start()
     		ssc.awaitTermination()
 	}
